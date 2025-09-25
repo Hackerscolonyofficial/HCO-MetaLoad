@@ -127,7 +127,7 @@ def show_welcome_banner():
     print(f"{YELLOW}           Termux Edition - Educational Use{RESET}\n")
 
 # ---------------------------
-# Module Base Classes
+# Module Base Classes (FIXED)
 # ---------------------------
 
 @dataclass
@@ -141,22 +141,24 @@ class Module:
 
 class ExploitModule(Module):
     def __init__(self, **kwargs):
+        # Ensure type is set correctly
+        kwargs['type'] = 'exploit'
         super().__init__(**kwargs)
-        self.type = "exploit"
     
     def run(self, **kwargs):
         raise NotImplementedError
 
 class AuxiliaryModule(Module):
     def __init__(self, **kwargs):
+        # Ensure type is set correctly
+        kwargs['type'] = 'auxiliary'
         super().__init__(**kwargs)
-        self.type = "auxiliary"
     
     def run(self, **kwargs):
         raise NotImplementedError
 
 # ---------------------------
-# Actual Modules
+# Actual Modules (FIXED)
 # ---------------------------
 
 class PortScanner(AuxiliaryModule):
