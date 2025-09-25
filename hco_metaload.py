@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-HCO MetaLoad - HCO Security Framework (Simplified Termux edition)
+HCO MetaLoad - APK Creator & Security Tool (Termux edition)
 
-A compact security assessment tool for authorized penetration testing & labs.
+A tool that provides APK creation options + security assessment features.
 
 Author: Azhar / Hackers Colony
-License: For authorized testing only (see LICENSE)
+License: For authorized testing only
 
-Usage:
-  python hco_metaload.py
+Features:
+- APK creation from Python scripts
+- Basic security assessment tools
+- Termux-compatible
 """
 
 import os
@@ -19,6 +21,8 @@ import socket
 import getpass
 import json
 import subprocess
+import shutil
+from pathlib import Path
 
 # ---------------------------
 # Colors
@@ -27,199 +31,335 @@ GREEN = "\033[32m"
 BLUE = "\033[34m"
 RED = "\033[31m"
 YELLOW = "\033[33m"
+CYAN = "\033[36m"
+MAGENTA = "\033[35m"
 RESET = "\033[0m"
 
 # ---------------------------
-# Helpers
+# APK Creation Functions
 # ---------------------------
-def safe_run(cmd):
-    """Run a shell command and return output (text)."""
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        return proc.stdout.strip()
-    except Exception:
-        return ""
 
-def check_port(host: str, port: int, timeout: float = 1.5) -> bool:
+def check_buildozer():
+    """Check if Buildozer is available for APK creation."""
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(timeout)
-            return sock.connect_ex((host, port)) == 0
-    except Exception:
+        result = subprocess.run(["buildozer", "--version"], 
+                              capture_output=True, text=True)
+        return "Buildozer" in result.stdout
+    except:
         return False
 
-def get_logged_in_users():
-    if platform.system().lower().startswith("win"):
-        return ["Windows: not supported in this edition"]
-    out = safe_run(["who"])
-    return out.splitlines() if out else []
+def create_basic_apk_template(project_name="MyApp", output_dir="."):
+    """Create a basic Kivy app template that can be converted to APK."""
+    template = f'''
+import kivy
+kivy.require("2.0.0")
 
-def get_system_uptime():
-    if platform.system().lower().startswith("win"):
-        return safe_run(["net", "stats", "server"]).splitlines()[0] if safe_run(["net", "stats", "server"]) else "Unknown"
-    try:
-        with open("/proc/uptime", "r") as f:
-            s = float(f.readline().split()[0])
-            days = int(s // 86400)
-            hours = int((s % 86400) // 3600)
-            return f"{days}d {hours}h"
-    except Exception:
-        return "Unknown"
+from kivy.app import App
+from kivy.uix.label import Label
+from kivy.uix.button import Button
+from kivy.uix.boxlayout import BoxLayout
 
-def get_network_interfaces():
+class {project_name}App(App):
+    def build(self):
+        self.title = "{project_name}"
+        layout = BoxLayout(orientation="vertical", padding=20)
+        
+        label = Label(
+            text="Welcome to {project_name}",
+            font_size="24sp",
+            color=(0.2, 0.6, 1, 1)
+        )
+        
+        button = Button(
+            text="Click Me!",
+            size_hint=(1, 0.2),
+            background_color=(0.1, 0.8, 0.3, 1)
+        )
+        button.bind(on_press=self.on_button_click)
+        
+        layout.add_widget(label)
+        layout.add_widget(button)
+        return layout
+    
+    def on_button_click(self, instance):
+        instance.text = "Hello from HCO MetaLoad!"
+
+if __name__ == "__main__":
+    {project_name}App().run()
+'''
+
+    main_py = os.path.join(output_dir, "main.py")
+    with open(main_py, "w") as f:
+        f.write(template)
+    
+    return main_py
+
+def create_buildozer_spec(project_name="MyApp", package_name="com.hco.metaload"):
+    """Create a basic buildozer.spec file."""
+    spec_content = f'''
+[app]
+title = {project_name}
+package.name = {package_name}
+package.domain = org.hco
+source.dir = .
+source.include_exts = py,png,jpg,kv,atlas
+version = 1.0
+requirements = python3,kivy
+orientation = portrait
+osx.python_version = 3
+osx.kivy_version = 2.0.0
+fullscreen = 0
+
+[buildozer]
+log_level = 2
+warn_on_root = 1
+
+[app]
+presplash.filename = %(source.dir)s/presplash.png
+icon.filename = %(source.dir)s/icon.png
+
+[buildozer]
+log_level = 2
+warn_on_root = 1
+'''
+    
+    with open("buildozer.spec", "w") as f:
+        f.write(spec_content)
+
+def setup_apk_project():
+    """Setup a new APK project."""
+    print(f"{CYAN}[*] Setting up APK project...{RESET}")
+    
+    project_name = input(f"{YELLOW}Enter project name: {RESET}").strip() or "HCOApp"
+    package_name = input(f"{YELLOW}Enter package name (com.example.app): {RESET}").strip() or "com.hco.metaload"
+    
+    project_dir = f"{project_name}_apk"
+    
     try:
-        return {name: {"index": idx} for idx, name in socket.if_nameindex()}
-    except Exception:
-        return {}
+        # Create project directory
+        os.makedirs(project_dir, exist_ok=True)
+        os.chdir(project_dir)
+        
+        # Create main.py
+        create_basic_apk_template(project_name, ".")
+        
+        # Create buildozer.spec
+        create_buildozer_spec(project_name, package_name)
+        
+        print(f"{GREEN}[+] APK project created in: {project_dir}{RESET}")
+        print(f"{GREEN}[+] Files created: main.py, buildozer.spec{RESET}")
+        print(f"{YELLOW}[!] Next steps:{RESET}")
+        print(f"   1. cd {project_dir}")
+        print(f"   2. buildozer android debug")
+        print(f"   3. Find APK in bin/ directory")
+        
+    except Exception as e:
+        print(f"{RED}[!] Error creating project: {e}{RESET}")
+        return False
+    
+    return True
+
+def build_apk():
+    """Build APK using Buildozer."""
+    if not check_buildozer():
+        print(f"{RED}[!] Buildozer not found!{RESET}")
+        print(f"{YELLOW}[*] Install with: pkg install python buildozer{RESET}")
+        return False
+    
+    print(f"{CYAN}[*] Building APK (this may take 10-30 minutes)...{RESET}")
+    print(f"{YELLOW}[!] Make sure you have good internet connection{RESET}")
+    
+    try:
+        # Start build process
+        process = subprocess.Popen(
+            ["buildozer", "android", "debug"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+        
+        # Stream output with progress indication
+        for line in process.stdout:
+            if "Downloading" in line or "Building" in line:
+                print(f"{CYAN}[BUILD] {line.strip()}{RESET}")
+            elif "error" in line.lower():
+                print(f"{RED}[ERROR] {line.strip()}{RESET}")
+            elif "warning" in line.lower():
+                print(f"{YELLOW}[WARN] {line.strip()}{RESET}")
+        
+        process.wait()
+        
+        if process.returncode == 0:
+            print(f"{GREEN}[+] APK built successfully!{RESET}")
+            print(f"{GREEN}[+] APK location: bin/{RESET}")
+            return True
+        else:
+            print(f"{RED}[!] APK build failed{RESET}")
+            return False
+            
+    except Exception as e:
+        print(f"{RED}[!] Build error: {e}{RESET}")
+        return False
 
 # ---------------------------
-# Modules
+# Security Modules (Optional)
 # ---------------------------
-def module_system_audit(**_):
+
+def module_system_info(**_):
+    """Basic system information."""
     return {
         "system": platform.platform(),
-        "machine": platform.machine(),
-        "processor": platform.processor(),
         "hostname": socket.gethostname(),
         "user": getpass.getuser(),
-        "python": platform.python_version(),
-        "users_logged_in": get_logged_in_users(),
-        "uptime": get_system_uptime(),
-        "interfaces": get_network_interfaces(),
+        "python_version": platform.python_version(),
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
     }
 
-def module_network_discovery(target="127.0.0.1", **_):
-    # small service list for quick checks
-    services = {
-        21: "FTP", 22: "SSH", 23: "Telnet", 25: "SMTP",
-        53: "DNS", 80: "HTTP", 443: "HTTPS", 3306: "MySQL", 3389: "RDP"
-    }
-    open_ports = []
-    for port, name in services.items():
-        if check_port(target, port):
-            open_ports.append({"port": port, "service": name})
-    try:
-        hostname = socket.gethostbyaddr(target)[0]
-    except Exception:
-        hostname = None
-    return {
-        "target": target,
-        "hostname": hostname,
-        "open_ports": open_ports,
-        "scanned_at": time.strftime("%Y-%m-%d %H:%M:%S")
-    }
-
-def module_security_assessment(**_):
-    # lightweight checks — keep manual recommendations
-    checks = [
-        {"item": "SSH", "status": "Check if running and key-based auth is used"},
-        {"item": "Firewall", "status": "Verify ufw/firewalld/iptables status"},
-        {"item": "Packages", "status": "Ensure OS packages are up-to-date"}
-    ]
-    return {"checks": checks, "assessment_date": time.strftime("%Y-%m-%d")}
+def check_port_scanner(target="127.0.0.1", **_):
+    """Simple port checker."""
+    ports = [21, 22, 80, 443, 8080]
+    results = {}
+    for port in ports:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(2)
+                results[port] = "OPEN" if s.connect_ex((target, port)) == 0 else "CLOSED"
+        except:
+            results[port] = "ERROR"
+    return {"target": target, "ports": results}
 
 MODULES = {
-    "system_audit": module_system_audit,
-    "network_discovery": module_network_discovery,
-    "security_assessment": module_security_assessment
+    "system_info": module_system_info,
+    "port_check": check_port_scanner
 }
 
 # ---------------------------
-# CLI UI
+# CLI Interface
 # ---------------------------
-def clear():
-    os.system("cls" if os.name == "nt" else "clear")
 
 def display_banner():
-    clear()
-    print(f"""{GREEN}
+    os.system("clear" if os.name != "nt" else "cls")
+    print(f"""{MAGENTA}
 ╔════════════════════════════════════════════════════╗
-║                    HCO MetaLoad                    ║
-║          Security Framework (Termux edition)        ║
+║              HCO MetaLoad - APK Creator            ║
+║                 & Security Toolkit                 ║
+║                                                    ║
+║    [1] Create APK from Python Script              ║
+║    [2] Build APK with Buildozer                   ║
+║    [3] Security Tools                             ║
+║    [4] Exit                                       ║
 ╚════════════════════════════════════════════════════╝
 {RESET}""")
 
-def show_legal():
-    print(f"{RED}⚠️  LEGAL NOTICE{RESET}")
-    print("Use this tool ONLY on systems you own or have explicit written permission to test.")
-    print("Unauthorized scanning or intrusion is illegal and may result in penalties.")
-    try:
-        input(f"\n{YELLOW}Press Enter to acknowledge and continue (Ctrl+C to exit){RESET}")
-    except KeyboardInterrupt:
-        print("\nCancelled by user.")
-        sys.exit(0)
-
-def show_help():
+def show_apk_menu():
     print(f"""
-{BLUE}Commands:{RESET}
-  {GREEN}help{RESET}                     - Show this help
-  {GREEN}modules{RESET}                  - List modules
-  {GREEN}use <module> [args]{RESET}      - Run a module, example:
-       use network_discovery target=192.168.1.1
-  {GREEN}exit{RESET}                     - Quit
+{CYAN}APK Creation Options:{RESET}
+
+{GREEN}[1]{RESET} Setup new APK project
+{BLUE}[2]{RESET} Build APK (requires existing project)
+{YELLOW}[3]{RESET} Check Buildozer installation
+{RED}[4]{RESET} Back to main menu
 """)
 
-def list_modules():
-    print(f"{BLUE}Available modules:{RESET}")
-    for name in MODULES:
-        print(f"  {GREEN}{name}{RESET}")
+def show_security_menu():
+    print(f"""
+{YELLOW}Security Tools:{RESET}
 
-def parse_args(argstr):
-    kwargs = {}
-    if not argstr:
-        return kwargs
-    for token in argstr.split():
-        if "=" in token:
-            k, v = token.split("=", 1)
-            kwargs[k.strip()] = v.strip()
-    return kwargs
+{GREEN}[1]{RESET} System Information
+{BLUE}[2]{RESET} Port Scanner
+{CYAN}[3]{RESET} List all modules
+{RED}[4]{RESET} Back to main menu
+""")
 
-def run_module(name, args_str=""):
-    if name not in MODULES:
-        print(f"{RED}[!] Module not found: {name}{RESET}")
-        return
-    kwargs = parse_args(args_str)
-    print(f"{YELLOW}[*] Running {name}...{RESET}")
-    start = time.time()
-    try:
-        result = MODULES[name](**kwargs)
-        elapsed = time.time() - start
-        print(f"{GREEN}[+] Completed in {elapsed:.2f}s{RESET}")
-        print(json.dumps(result, indent=2, default=str))
-    except Exception as e:
-        print(f"{RED}[ERROR] {e}{RESET}")
-
-def main_loop():
+def apk_creation_flow():
+    """Handle APK creation menu."""
     while True:
-        try:
-            cmd = input(f"{GREEN}hco-metaload>{RESET} ").strip()
-            if not cmd:
-                continue
-            if cmd in ("exit", "quit"):
-                print("Bye.")
-                break
-            if cmd == "help":
-                show_help(); continue
-            if cmd == "modules":
-                list_modules(); continue
-            if cmd.startswith("use "):
-                parts = cmd.split(maxsplit=2)
-                mod = parts[1]
-                args = parts[2] if len(parts) > 2 else ""
-                run_module(mod, args)
-                continue
-            print(f"{RED}Unknown command. Type 'help'.{RESET}")
-        except KeyboardInterrupt:
-            print("\nInterrupted. Type 'exit' to quit.")
-        except Exception as e:
-            print(f"{RED}Unexpected error: {e}{RESET}")
+        show_apk_menu()
+        choice = input(f"{GREEN}apk> {RESET}").strip()
+        
+        if choice == "1":
+            setup_apk_project()
+            input(f"{YELLOW}Press Enter to continue...{RESET}")
+            
+        elif choice == "2":
+            if not os.path.exists("buildozer.spec"):
+                print(f"{RED}[!] No buildozer.spec found in current directory{RESET}")
+                print(f"{YELLOW}[*] Run option 1 first or cd to your project directory{RESET}")
+            else:
+                build_apk()
+            input(f"{YELLOW}Press Enter to continue...{RESET}")
+            
+        elif choice == "3":
+            if check_buildozer():
+                print(f"{GREEN}[+] Buildozer is installed and ready{RESET}")
+            else:
+                print(f"{RED}[!] Buildozer not found{RESET}")
+                print(f"{YELLOW}[*] Install with: pkg install python buildozer{RESET}")
+            input(f"{YELLOW}Press Enter to continue...{RESET}")
+            
+        elif choice == "4":
+            break
+        else:
+            print(f"{RED}[!] Invalid choice{RESET}")
+
+def security_tools_flow():
+    """Handle security tools menu."""
+    while True:
+        show_security_menu()
+        choice = input(f"{GREEN}security> {RESET}").strip()
+        
+        if choice == "1":
+            result = module_system_info()
+            print(json.dumps(result, indent=2))
+            input(f"{YELLOW}Press Enter to continue...{RESET}")
+            
+        elif choice == "2":
+            target = input(f"{YELLOW}Enter target (default: 127.0.0.1): {RESET}").strip() or "127.0.0.1"
+            result = check_port_scanner(target=target)
+            print(json.dumps(result, indent=2))
+            input(f"{YELLOW}Press Enter to continue...{RESET}")
+            
+        elif choice == "3":
+            print(f"{CYAN}Available modules:{RESET}")
+            for name in MODULES:
+                print(f"  {GREEN}{name}{RESET}")
+            input(f"{YELLOW}Press Enter to continue...{RESET}")
+            
+        elif choice == "4":
+            break
+        else:
+            print(f"{RED}[!] Invalid choice{RESET}")
+
+def main_menu():
+    """Main menu loop."""
+    while True:
+        display_banner()
+        print(f"{CYAN}Main Menu:{RESET}")
+        print(f"{GREEN}[1]{RESET} APK Creation Tools")
+        print(f"{BLUE}[2]{RESET} Security Assessment Tools")
+        print(f"{RED}[3]{RESET} Exit")
+        
+        choice = input(f"\n{GREEN}hco-metaload> {RESET}").strip()
+        
+        if choice == "1":
+            apk_creation_flow()
+        elif choice == "2":
+            security_tools_flow()
+        elif choice == "3":
+            print(f"{GREEN}Thank you for using HCO MetaLoad!{RESET}")
+            break
+        else:
+            print(f"{RED}[!] Please choose 1, 2, or 3{RESET}")
+            time.sleep(1)
 
 def main():
-    display_banner()
-    show_legal()
-    print(f"{YELLOW}Type 'help' to get started.{RESET}\n")
-    main_loop()
+    """Main entry point."""
+    try:
+        main_menu()
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Program interrupted by user.{RESET}")
+    except Exception as e:
+        print(f"{RED}[!] Error: {e}{RESET}")
 
 if __name__ == "__main__":
     main()
